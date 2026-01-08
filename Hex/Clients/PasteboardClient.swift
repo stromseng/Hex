@@ -20,6 +20,9 @@ struct PasteboardClient {
     var paste: @Sendable (String) async -> Void
     var copy: @Sendable (String) async -> Void
     var sendKeyboardCommand: @Sendable (KeyboardCommand) async -> Void
+    /// Attempts to get the currently selected text from the active application.
+    /// First tries Accessibility API, then falls back to Cmd+C if that fails.
+    var getSelectedText: @Sendable () async -> String?
 }
 
 extension PasteboardClient: DependencyKey {
@@ -34,6 +37,9 @@ extension PasteboardClient: DependencyKey {
             },
             sendKeyboardCommand: { command in
                 await live.sendKeyboardCommand(command)
+            },
+            getSelectedText: {
+                await live.getSelectedText()
             }
         )
     }
@@ -376,5 +382,95 @@ struct PasteboardClientLive {
         if insertResult != .success {
             throw PasteError.failedToInsertText
         }
+    }
+
+    // MARK: - Get Selected Text
+
+    /// Attempts to get the currently selected text from the active application.
+    /// First tries Accessibility API, then falls back to Cmd+C if that fails.
+    @MainActor
+    func getSelectedText() async -> String? {
+        // First, try Accessibility API (faster and non-invasive)
+        if let text = getSelectedTextViaAccessibility(), !text.isEmpty {
+            pasteboardLogger.debug("Got selected text via Accessibility API")
+            return text
+        }
+
+        // Fall back to Cmd+C approach
+        pasteboardLogger.debug("Accessibility API failed, falling back to Cmd+C")
+        return await getSelectedTextViaCopy()
+    }
+
+    /// Try to get selected text using the Accessibility API
+    private func getSelectedTextViaAccessibility() -> String? {
+        let systemWideElement = AXUIElementCreateSystemWide()
+
+        // Get the focused element
+        var focusedElementRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            systemWideElement,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedElementRef
+        ) == .success, let focusedElementRef = focusedElementRef else {
+            return nil
+        }
+
+        let focusedElement = focusedElementRef as! AXUIElement
+
+        // Try to get the selected text
+        var selectedTextRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            focusedElement,
+            kAXSelectedTextAttribute as CFString,
+            &selectedTextRef
+        ) == .success else {
+            return nil
+        }
+
+        return selectedTextRef as? String
+    }
+
+    /// Get selected text by simulating Cmd+C, saving and restoring clipboard
+    @MainActor
+    private func getSelectedTextViaCopy() async -> String? {
+        let pasteboard = NSPasteboard.general
+        let snapshot = PasteboardSnapshot(pasteboard: pasteboard)
+
+        // Clear clipboard first
+        pasteboard.clearContents()
+        let beforeCount = pasteboard.changeCount
+
+        // Simulate Cmd+C
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let cKeyCode = Sauce.shared.keyCode(for: .c)
+        let cmdKey: CGKeyCode = 55
+
+        let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: cmdKey, keyDown: true)
+        let cDown = CGEvent(keyboardEventSource: source, virtualKey: cKeyCode, keyDown: true)
+        cDown?.flags = .maskCommand
+        let cUp = CGEvent(keyboardEventSource: source, virtualKey: cKeyCode, keyDown: false)
+        cUp?.flags = .maskCommand
+        let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: cmdKey, keyDown: false)
+
+        cmdDown?.post(tap: .cghidEventTap)
+        cDown?.post(tap: .cghidEventTap)
+        cUp?.post(tap: .cghidEventTap)
+        cmdUp?.post(tap: .cghidEventTap)
+
+        // Wait for clipboard to be updated
+        try? await Task.sleep(for: .milliseconds(100))
+
+        // Check if clipboard changed
+        let text: String?
+        if pasteboard.changeCount > beforeCount {
+            text = pasteboard.string(forType: .string)
+        } else {
+            text = nil
+        }
+
+        // Restore original clipboard
+        snapshot.restore(to: pasteboard)
+
+        return text?.isEmpty == false ? text : nil
     }
 }

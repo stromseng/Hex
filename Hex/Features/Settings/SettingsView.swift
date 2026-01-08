@@ -37,6 +37,7 @@ struct SettingsView: View {
 
 			SoundSectionView(store: store)
 			GeneralSectionView(store: store)
+			AgentSectionView(store: store)
 			HistorySectionView(store: store)
 			AdvancedSectionView(store: store)
 		}

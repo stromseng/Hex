@@ -55,6 +55,12 @@ struct SettingsFeature {
     // Diagnostics
     var isExportingLogs = false
     var logExportStatus: LogExportStatus?
+    
+    // Agent script status
+    var agentScriptExists: Bool = false
+    var availableAgentScripts: [String] = []
+    var scriptInstallStatus: ScriptInstallStatus?
+    var isInstallingScript: Bool = false
   }
 
   enum Action: BindableAction {
@@ -98,6 +104,16 @@ struct SettingsFeature {
     case addWordRemapping
     case removeWordRemapping(UUID)
     case setRemappingScratchpadFocused(Bool)
+    
+    // Agent settings
+    case setAgentScriptName(String?)
+    case revealAgentScriptsFolder
+    case checkAgentScriptExists
+    case loadAvailableAgentScripts
+    case availableAgentScriptsLoaded([String])
+    case installBundledScript(BundledAgentScript)
+    case bundledScriptInstalled(BundledAgentScript)
+    case bundledScriptInstallFailed(String)
   }
 
   @Dependency(\.keyEventMonitor) var keyEventMonitor
@@ -106,6 +122,7 @@ struct SettingsFeature {
   @Dependency(\.recording) var recording
   @Dependency(\.permissions) var permissions
   @Dependency(\.logExporter) var logExporter
+  @Dependency(\.agentProcessing) var agentProcessing
 
   var body: some ReducerOf<Self> {
     BindingReducer()
@@ -132,6 +149,14 @@ struct SettingsFeature {
         } else {
           settingsLogger.error("Failed to load languages JSON from bundle")
         }
+        
+        // Check agent script exists on load
+        if let scriptName = state.hexSettings.agentScriptName, !scriptName.isEmpty {
+          state.agentScriptExists = agentProcessing.scriptExists(scriptName)
+        }
+        
+        // Load available agent scripts
+        state.availableAgentScripts = agentProcessing.listAvailableScripts()
 
         // Listen for key events and load microphones (existing + new)
         return .run { send in
@@ -399,6 +424,67 @@ struct SettingsFeature {
         state.isExportingLogs = false
         state.logExportStatus = .failure(message)
         return .none
+      
+      // MARK: - Agent Settings
+      
+      case let .setAgentScriptName(name):
+        state.$hexSettings.withLock { $0.agentScriptName = name }
+        // Check if script exists after setting name
+        if let scriptName = name, !scriptName.isEmpty {
+          state.agentScriptExists = agentProcessing.scriptExists(scriptName)
+        } else {
+          state.agentScriptExists = false
+        }
+        return .none
+      
+      case .revealAgentScriptsFolder:
+        return .run { [agentProcessing] _ in
+          await agentProcessing.revealScriptsFolder()
+        }
+      
+      case .checkAgentScriptExists:
+        if let scriptName = state.hexSettings.agentScriptName, !scriptName.isEmpty {
+          state.agentScriptExists = agentProcessing.scriptExists(scriptName)
+        } else {
+          state.agentScriptExists = false
+        }
+        return .none
+      
+      case .loadAvailableAgentScripts:
+        state.availableAgentScripts = agentProcessing.listAvailableScripts()
+        return .none
+      
+      case let .availableAgentScriptsLoaded(scripts):
+        state.availableAgentScripts = scripts
+        return .none
+      
+      case let .installBundledScript(script):
+        guard !state.isInstallingScript else { return .none }
+        state.isInstallingScript = true
+        state.scriptInstallStatus = nil
+        return .run { send in
+          do {
+            try await agentProcessing.installBundledScript(script)
+            await send(.bundledScriptInstalled(script))
+          } catch {
+            await send(.bundledScriptInstallFailed(error.localizedDescription))
+          }
+        }
+      
+      case let .bundledScriptInstalled(script):
+        state.isInstallingScript = false
+        state.scriptInstallStatus = .success("Installed \(script.displayName)")
+        // Set the script name to the installed script and refresh script list
+        state.$hexSettings.withLock { $0.agentScriptName = script.rawValue }
+        state.agentScriptExists = true
+        state.availableAgentScripts = agentProcessing.listAvailableScripts()
+        return .none
+      
+      case let .bundledScriptInstallFailed(message):
+        state.isInstallingScript = false
+        state.scriptInstallStatus = .failure(message)
+        settingsLogger.error("Failed to install bundled script: \(message)")
+        return .none
       }
     }
   }
@@ -406,6 +492,11 @@ struct SettingsFeature {
 
 extension SettingsFeature.State {
   enum LogExportStatus: Equatable {
+    case success(String)
+    case failure(String)
+  }
+  
+  enum ScriptInstallStatus: Equatable {
     case success(String)
     case failure(String)
   }

@@ -35,8 +35,9 @@ The app uses **The Composable Architecture (TCA)** for state management. Key arc
 ### Dependency Clients
 - `TranscriptionClient`: WhisperKit integration for ML transcription
 - `RecordingClient`: AVAudioRecorder wrapper for audio capture
-- `PasteboardClient`: Clipboard operations
+- `PasteboardClient`: Clipboard operations and selected text retrieval
 - `KeyEventMonitorClient`: Global hotkey monitoring via Sauce framework
+- `AgentProcessingClient`: External script execution for agent mode
 
 ### Key Dependencies
 - **WhisperKit**: Core ML transcription (tracking main branch)
@@ -63,6 +64,15 @@ The app uses **The Composable Architecture (TCA)** for state management. Key arc
 5. **Permissions**: Requires audio input and automation entitlements (see `Hex.entitlements`)
 
 6. **Logging**: All diagnostics should use the unified logging helper `HexLog` (`HexCore/Sources/HexCore/Logging.swift`). Pick an existing category (e.g., `.transcription`, `.recording`, `.settings`) or add a new case so Console predicates stay consistent. Avoid `print` and prefer privacy annotations (`, privacy: .private`) for anything potentially sensitive like transcript text or file paths.
+
+7. **Agent Mode**: Allows transcriptions to be processed through an external script before pasting. Implemented via:
+   - `AgentProcessingClient`: Executes scripts using `NSUserUnixTask` (sandbox-compliant)
+   - Scripts must be placed in `~/Library/Application Scripts/com.kitlangton.Hex/`
+   - Activated by holding an additional modifier (default: Control) while using the transcription hotkey
+   - If text was selected before recording, it's included as context
+   - Input is passed as JSON via stdin: `{"transcript": "...", "selectedText": "..."}` (selectedText is null if none)
+   - Script output (stdout) replaces the raw transcription for pasting
+   - 60-second timeout; errors result in cancel sound + logging
 
 ## Models (2025‑11)
 

@@ -181,11 +181,21 @@ public struct HotKeyProcessor {
         }
 
         // 3) Matching chord => handle as "press"
-        if chordMatchesHotkey(keyEvent) {
+        let matches = chordMatchesHotkey(keyEvent)
+        let eventModsStr = keyEvent.modifiers.kinds.map { $0.rawValue }.joined(separator: ",")
+        let hotkeyModsStr = hotkey.modifiers.kinds.map { $0.rawValue }.joined(separator: ",")
+        let currentState = String(describing: state)
+        let currentDirty = isDirty
+        hotKeyLogger.notice(
+            "HotKeyProcessor.process: event=[\(eventModsStr)] hotkey=[\(hotkeyModsStr)] matches=\(matches) state=\(currentState) isDirty=\(currentDirty)"
+        )
+        
+        if matches {
             return handleMatchingChord()
         } else {
             // Potentially become dirty if chord has extra mods or different key
             if chordIsDirty(keyEvent) {
+                hotKeyLogger.notice("HotKeyProcessor: marking dirty due to extra mods/keys")
                 isDirty = true
             }
             return handleNonmatchingChord(keyEvent)

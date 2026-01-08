@@ -38,6 +38,11 @@ public struct HexSettings: Codable, Equatable, Sendable {
 	public var hasCompletedStorageMigration: Bool
 	public var wordRemappings: [WordRemapping]
 
+	// Agent processing settings
+	public var agentModeEnabled: Bool
+	public var agentModeModifier: Modifier.Kind
+	public var agentScriptName: String?
+
 	public init(
 		soundEffectsEnabled: Bool = true,
 		soundEffectsVolume: Double = HexSettings.baseSoundEffectsVolume,
@@ -58,7 +63,10 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		pasteLastTranscriptHotkey: HotKey? = HexSettings.defaultPasteLastTranscriptHotkey,
 		hasCompletedModelBootstrap: Bool = false,
 		hasCompletedStorageMigration: Bool = false,
-		wordRemappings: [WordRemapping] = []
+		wordRemappings: [WordRemapping] = [],
+		agentModeEnabled: Bool = false,
+		agentModeModifier: Modifier.Kind = .control,
+		agentScriptName: String? = nil
 	) {
 		self.soundEffectsEnabled = soundEffectsEnabled
 		self.soundEffectsVolume = soundEffectsVolume
@@ -80,6 +88,9 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		self.hasCompletedModelBootstrap = hasCompletedModelBootstrap
 		self.hasCompletedStorageMigration = hasCompletedStorageMigration
 		self.wordRemappings = wordRemappings
+		self.agentModeEnabled = agentModeEnabled
+		self.agentModeModifier = agentModeModifier
+		self.agentScriptName = agentScriptName
 	}
 
 	public init(from decoder: Decoder) throws {
@@ -122,6 +133,9 @@ private enum HexSettingKey: String, CodingKey, CaseIterable {
 	case hasCompletedModelBootstrap
 	case hasCompletedStorageMigration
 	case wordRemappings
+	case agentModeEnabled
+	case agentModeModifier
+	case agentScriptName
 }
 
 private struct SettingsField<Value: Codable & Sendable> {
@@ -246,6 +260,16 @@ private enum HexSettingsSchema {
 			.wordRemappings,
 			keyPath: \.wordRemappings,
 			default: defaults.wordRemappings
+		).eraseToAny(),
+		SettingsField(.agentModeEnabled, keyPath: \.agentModeEnabled, default: defaults.agentModeEnabled).eraseToAny(),
+		SettingsField(.agentModeModifier, keyPath: \.agentModeModifier, default: defaults.agentModeModifier).eraseToAny(),
+		SettingsField(
+			.agentScriptName,
+			keyPath: \.agentScriptName,
+			default: defaults.agentScriptName,
+			encode: { container, key, value in
+				try container.encodeIfPresent(value, forKey: key)
+			}
 		).eraseToAny()
 	]
 }

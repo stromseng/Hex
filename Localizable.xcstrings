@@ -61,10 +61,16 @@
     "Accuracy" : {
 
     },
+    "Add Claude Code Script" : {
+
+    },
     "Add Remapping" : {
 
     },
     "Advanced" : {
+
+    },
+    "Agent" : {
 
     },
     "Are you sure you want to delete all transcripts? This action cannot be undone." : {
@@ -276,6 +282,9 @@
     "Downloading… %lld%%" : {
 
     },
+    "Enable Agent Processing" : {
+
+    },
     "Enable in Settings" : {
 
     },
@@ -357,6 +366,9 @@
       }
     },
     "History Disabled" : {
+
+    },
+    "Hold this modifier along with your transcription hotkey to process through agent" : {
 
     },
     "Hot Key" : {
@@ -459,6 +471,9 @@
         }
       }
     },
+    "Open Scripts Folder" : {
+
+    },
     "Output Language" : {
       "comment" : "transcription model setting for which language to use for text output.",
       "localizations" : {
@@ -533,6 +548,9 @@
     "Refresh available input devices" : {
 
     },
+    "Refresh script list" : {
+
+    },
     "Remappings" : {
 
     },
@@ -570,6 +588,15 @@
 
     },
     "Scratchpad" : {
+
+    },
+    "Script" : {
+
+    },
+    "Scripts receive JSON via stdin with 'transcript' and optional 'selectedText' fields. Script output is pasted." : {
+
+    },
+    "Select a script..." : {
 
     },
     "Selected device not connected. System default will be used." : {
@@ -691,6 +718,9 @@
           }
         }
       }
+    },
+    "Trigger Modifier" : {
+
     },
     "Unlimited" : {
 

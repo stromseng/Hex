@@ -404,7 +404,27 @@ class KeyEventMonitorClientLive {
 
           hotKeyClientLive.updateFnStateIfNeeded(type: type, cgEvent: cgEvent)
 
+          // Check if this is a synthetic/programmatic event
+          // Events posted via CGEventPost use combinedSessionState (1) or privateState (-1)
+          // Real hardware events use hidSystemState (0)
+          let sourceStateID = cgEvent.getIntegerValueField(.eventSourceStateID)
+          let isSyntheticEvent = sourceStateID != Int64(CGEventSourceStateID.hidSystemState.rawValue)
+          
           let keyEvent = KeyEvent(cgEvent: cgEvent, type: type, isFnPressed: hotKeyClientLive.isFnPressed)
+          
+          // Log raw event details for debugging
+          let modsStr = keyEvent.modifiers.kinds.map { $0.rawValue }.joined(separator: ",")
+          let keyStr = keyEvent.key?.rawValue ?? "nil"
+          logger.notice("KeyEvent: key=\(keyStr) mods=[\(modsStr)] type=\(type.rawValue) fnPressed=\(hotKeyClientLive.isFnPressed) sourceState=\(sourceStateID) synthetic=\(isSyntheticEvent)")
+          
+          // Skip ALL synthetic events to avoid interference from programmatic key simulation
+          // (e.g., Cmd+C for copying selected text). This includes both keyDown/keyUp AND 
+          // flagsChanged events from synthetic modifier presses.
+          if isSyntheticEvent {
+            logger.notice("Skipping synthetic event (type=\(type.rawValue))")
+            return Unmanaged.passUnretained(cgEvent)
+          }
+          
           let handledByKeyHandler = hotKeyClientLive.processKeyEvent(keyEvent)
           let handledByInputHandler = hotKeyClientLive.processInputEvent(.keyboard(keyEvent))
 
